@@ -1,0 +1,85 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+	// First determine if we have a A or C instruction
+    // by looking at the MSB
+    DMux(in=true, sel=instruction[15], a=aType, b=cType);
+    // Next look at the dest in instructions if we need to
+    // address the A or D register
+    Or(a=aType, b=instruction[5], out=aInstruct);
+    And(a=cType, b=instruction[4], out=cInstruct);
+
+    // A Register + mux for A Register
+    Mux16(a=aluOut, b=instruction, sel=aType, out=toAReg);
+    ARegister(in=toAReg, load=aInstruct,
+             out=aRegOut, out[0..14]=addressM);
+
+    // Check if we need A or M for the ALU
+    Mux16(a=aRegOut, b=inM, sel=instruction[12], out=inputSel);
+    // ALU
+    ALU(x=dRegOut, y=inputSel,
+         zx=instruction[11], nx=instruction[10],
+         zy=instruction[9], ny=instruction[8],
+         f=instruction[7], no=instruction[6],
+         out=aluOut, zr=zrOut, ng=ngOut, out=outM);
+    // WriteM
+    And(a=cType, b=instruction[3], out=writeM);
+    // D register
+    DRegister(in=aluOut, load=cInstruct, out=dRegOut);
+
+    // First create a positive and a negative/zero signal 
+    // with some outputs from ALU
+    Or(a=zrOut, b=ngOut, out=negOrZero);		
+    Not(in=negOrZero, out=posOut);		
+    // Create the signals for the jump consitions
+    // JGT cond > 0
+    And(a=instruction[0], b=posOut, out=JGT);	
+    // JEQ cond == 0
+    And(a=instruction[1], b=zrOut, out=JEQ);
+    // JLT cond < 0	
+    And(a=instruction[2], b=ngOut, out=JLT); 
+    // JLE cond <= 0	
+    Or(a=JEQ, b=JLT, out=JLE);
+    // all jump conditions			
+    Or(a=JGT, b=JLE, out=jmp);			
+
+    // We only jump for C instructions
+    And(a=jmp, b=cType, out=JMP);
+    // if we don't jump we increment		
+    Not(in=JMP, out=increment);
+    // PC			
+    PC(in=aRegOut, load=JMP,
+     inc=increment, reset=reset,
+      out[0..14]=pc);
+}
