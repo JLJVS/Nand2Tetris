@@ -54,9 +54,9 @@ def get_symbols(lines: list[str]):
             symbols[name] = jump_locations[name]
             
     
-    occupied = [val for key, val in free_locations.items()]
+    occupied = [val for key, val in free_locations.items()if val not in symbols]
     sixteen_and_up = [i for i in range(16, 10000)]
-    correct = [(num, name) for name, num in zip(occupied, sixteen_and_up)]
+    correct = [(num, name) for name, num in zip(occupied, sixteen_and_up) ]
     for (num, name) in correct:
         if name not in symbols:
             symbols[name] = num
@@ -168,6 +168,10 @@ def assembler(filepath):
             translated += get_jump(line)
 
         translation.append(translated)
+        
+    # uncomment if you want to see the output per line
+    # for i, t in enumerate(translation):
+    #    print(i, t)
 
     with open(f"{HACK_FILEPATH}hack", 'w') as f:
         for line in translation:
